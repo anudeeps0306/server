@@ -1,13 +1,35 @@
-# URL Shortener Client
+# Link Analytics Backend
 
-This React application is a client-side interface for a URL shortening service. It allows users to create, view, and manage shortened URLs, as well as view analytics.
+This is the backend server for a URL shortening and analytics platform. It provides API endpoints for creating short URLs, redirecting to original URLs, managing user authentication, and retrieving analytics data.
 
-## Installation
+## Features
+
+* **URL Shortening:** Generates short, unique aliases for long URLs.  Allows for custom aliases.
+* **User Authentication:** Secure user registration and login using JWT.
+* **URL Management:** Create, retrieve, and delete shortened URLs.
+* **Click Tracking:** Logs detailed information about each click on a shortened URL (device, browser, OS, IP address, etc.).
+* **Analytics:** Provides insights into URL usage, including click counts, click history, device/browser/OS breakdown.
+* **URL Expiration:** Option to set expiration dates for shortened URLs.
+
+## Technologies Used
+
+* **Node.js:** JavaScript runtime environment
+* **Express:** Web application framework for Node.js
+* **MongoDB:** NoSQL database
+* **Mongoose:** MongoDB object modeling tool
+* **jsonwebtoken:** JSON Web Token for authentication
+* **bcryptjs:** For hashing passwords
+* **nanoid:** For generating unique URL codes
+* **ua-parser-js:** For parsing user-agent strings
+* **dotenv:** For managing environment variables
+* **cors:** For enabling Cross-Origin Resource Sharing
+
+## Setup
 
 1.  **Clone the repository:**
 
     ```bash
-    git clone https://github.com/anudeeps0306/server.git
+    git clone https://github.com/anudeeps0306/server
     cd server
     ```
 
@@ -17,59 +39,106 @@ This React application is a client-side interface for a URL shortening service. 
     npm install
     ```
 
-3.  **Set up environment variables:**
+3.  **Configure environment variables:**
 
-    * Create a `.env.local` file in the root directory.
-    * Add the following variable, adjusting the URL if necessary:
+    * Create a `.env` file in the root directory.
+    * Add the following variables:
 
         ```
-        REACT_APP_API_URL=http://localhost:5000 
+        MONGO_URI=your_mongodb_connection_string
+        JWT_SECRET=your_jwt_secret_key
+        PORT=5000  # or your preferred port
         ```
 
-        (This should be the URL of your backend server)
+    * Replace `your_mongodb_connection_string` and `your_jwt_secret_key` with your actual MongoDB connection string and a strong, secret key for JWT.
 
-4.  **Run the application:**
+4.  **Run the server:**
 
     ```bash
-    npm start
+    npm start         # To start the server
+    npm run dev     # To start the server with nodemon for development
     ```
 
-    The app will be accessible at `http://localhost:3000` in development mode.
+    The server will start at `http://localhost:5000` (or the port you specified).
 
-## Routes
+## API Endpoints
 
-The application uses React Router for navigation and defines the following routes:
+### Authentication
 
-* `/` :
-    * If the user is **not authenticated**, this displays the `Login` component, allowing them to sign in [cite: client/src/App.js, client/src/components/auth/Login.js].
-    * If the user **is authenticated**, this redirects them to the `/dashboard` [cite: client/src/App.js].
-* `/dashboard` :
-    * Displays the `Dashboard` component, showing the user's shortened URLs, search functionality, and a link to create new URLs [cite: client/src/App.js, client/src/components/dashboard/Dashboard.js].
-    * Accessible only to authenticated users.
-* `/create` :
-    * Displays the `UrlForm` component, allowing users to create a new shortened URL [cite: client/src/App.js, client/src/components/url/UrlForm.js].
-    * Accessible only to authenticated users.
-* `/url/:id` :
-    * Displays the `UrlDetail` component, showing analytics for a specific URL (e.g., clicks over time, device/browser breakdown) [cite: client/src/App.js, client/src/components/url/UrlDetail.js].
-    * `id` is a parameter representing the unique identifier of the URL.
-    * Accessible only to authenticated users.
+* `POST /api/auth/login`:   Authenticate user and get JWT token.
+    * Request body: `{ email, password }`
+    * Response: `{ token }`
+* `GET /api/auth/user`:  Get user data (requires authentication).
+    * Headers: `x-auth-token: <token>`
+    * Response: `{ id, email, createdAt }`
+
+### URL Management
+
+* `POST /api/url`:  Create a shortened URL (requires authentication).
+    * Headers: `x-auth-token: <token>`
+    * Request body: `{ originalUrl, customAlias?, expirationDate? }`
+    * Response: `{ _id, userId, originalUrl, shortCode, clicks, expiresAt, createdAt }`
+* `GET /api/url`:  Get all URLs for the authenticated user (requires authentication).
+    * Headers: `x-auth-token: <token>`
+    * Response: `[ { _id, userId, originalUrl, shortCode, clicks, expiresAt, createdAt }, ... ]`
+* `GET /api/url/:id/analytics`:  Get analytics for a specific URL (requires authentication).
+    * Headers: `x-auth-token: <token>`
+    * Response:
+        ```json
+        {
+          "url": { ...urlData },
+          "clicksOverTime": [ { "date": "YYYY-MM-DD", "clicks": number } ],
+          "deviceBreakdown": [ { "device": "Device Type", "count": number } ],
+          "browserBreakdown": [ { "browser": "Browser Name", "count": number } ],
+          "totalClicks": number
+        }
+        ```
+* `DELETE /api/url/:id`:  Delete a URL (requires authentication).
+    * Headers: `x-auth-token: <token>`
+    * Response: `{ msg: "URL removed" }`
+
+### URL Redirection
+
+* `GET /:code`:  Redirect to the original URL based on the short code.  This route also tracks clicks.
+    * Response:  HTTP Redirect to the original URL
+
+## Models
+
+* **User:**
+    * `email` (String, required, unique)
+    * `password` (String, required)
+    * `createdAt` (Date)
+* **Url:**
+    * `userId` (ObjectId, ref: 'User', required)
+    * `originalUrl` (String, required)
+    * `shortCode` (String, required, unique)
+    * `clicks` (Number)
+    * `expiresAt` (Date)
+    * `createdAt` (Date)
+* **ClickData:**
+    * `urlId` (ObjectId, ref: 'Url', required)
+    * `timestamp` (Date)
+    * `ip` (String)
+    * `browser` (String)
+    * `os` (String)
+    * `device` (String)
+    * `country` (String, default: 'Unknown')
+    * `referrer` (String, default: 'Direct')
 
 ## Authentication
 
-* The application uses JWT (JSON Web Tokens) for authentication.
-* After successful login, the token is stored in `localStorage` and included in the `x-auth-token` header for subsequent requests [cite: client/src/utils/setAuthToken.js, client/src/redux/authSlice.js].
+* Authentication is implemented using JSON Web Tokens (JWT).
+* The `auth` middleware (`middleware/auth.js`) is used to protect routes that require authentication.  It extracts the token from the `x-auth-token` header and verifies it.
+* Upon successful login (`/api/auth/login`), the server returns a JWT that the client should store and include in the headers of subsequent requests to protected routes.
 
+## Click Tracking
 
-## Key Components
+* The `/ :code` route in `routes/redirect.js` handles redirection and click tracking.
+* It uses the `ua-parser-js` library to gather information about the user's device, browser, and OS.
+* Click data is stored in the `ClickData` model in MongoDB.
+* `Promise.all()` is used to asynchronously save the click data and update the URL's click count, ensuring efficient performance.
 
-* `Login.js`:  Handles user login.
-* `Dashboard.js`:  Displays the main dashboard with the list of URLs.
-* `UrlForm.js`:  Provides a form to create new URLs.
-* `UrlDetail.js`:  Displays detailed analytics for a specific URL.
-* `Navbar.js`:  The application's navigation bar.
-* `setAuthToken.js`:  A utility to set/clear the JWT in the Axios request headers.
+## Error Handling
 
-## Notes
-
-* This client-side application relies on a separate backend server to handle API requests, user authentication, and URL redirection.
-* Styling is implemented using Tailwind CSS.
+* The server returns appropriate HTTP status codes for errors (e.g., 400 for bad requests, 401 for unauthorized access, 404 for not found, 500 for server errors).
+* Error messages are typically returned in JSON format: `{ msg: "Error message" }`
